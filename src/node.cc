@@ -63,14 +63,8 @@ typedef int mode_t;
 #endif
 
 #include "node_buffer.h"
-#ifdef __POSIX__
-# include "node_io_watcher.h"
-#endif
 #include "node_file.h"
 #include "node_http_parser.h"
-#ifdef __POSIX__
-# include "node_signal_watcher.h"
-#endif
 #include "node_constants.h"
 #include "node_javascript.h"
 #include "node_version.h"
@@ -694,6 +688,10 @@ const char *signo_string(int signo) {
   SIGNO_CASE(SIGTSTP);
 #endif
 
+#ifdef SIGBREAK
+  SIGNO_CASE(SIGBREAK);
+#endif
+
 #ifdef SIGTTIN
   SIGNO_CASE(SIGTTIN);
 #endif
@@ -1069,6 +1067,8 @@ enum encoding ParseEncoding(Handle<Value> encoding_v, enum encoding _default) {
     return UCS2;
   } else if (strcasecmp(*encoding, "binary") == 0) {
     return BINARY;
+  } else if (strcasecmp(*encoding, "buffer") == 0) {
+    return BUFFER;
   } else if (strcasecmp(*encoding, "hex") == 0) {
     return HEX;
   } else if (strcasecmp(*encoding, "raw") == 0) {
@@ -1090,6 +1090,11 @@ enum encoding ParseEncoding(Handle<Value> encoding_v, enum encoding _default) {
 
 Local<Value> Encode(const void *buf, size_t len, enum encoding encoding) {
   HandleScope scope;
+
+  if (encoding == BUFFER) {
+    return scope.Close(
+        Buffer::New(static_cast<const char*>(buf), len)->handle_);
+  }
 
   if (!len) return scope.Close(String::Empty());
 
@@ -1121,7 +1126,7 @@ ssize_t DecodeBytes(v8::Handle<v8::Value> val, enum encoding encoding) {
     return -1;
   }
 
-  if (encoding == BINARY && Buffer::HasInstance(val)) {
+  if ((encoding == BUFFER || encoding == BINARY) && Buffer::HasInstance(val)) {
     return Buffer::Length(val->ToObject());
   }
 
@@ -1158,7 +1163,26 @@ ssize_t DecodeWrite(char *buf,
     return -1;
   }
 
-  Local<String> str = val->ToString();
+  bool is_buffer = Buffer::HasInstance(val);
+
+  if (is_buffer && (encoding == BINARY || encoding == BUFFER)) {
+    // fast path, copy buffer data
+    const char* data = Buffer::Data(val.As<Object>());
+    size_t size = Buffer::Length(val.As<Object>());
+    size_t len = size < buflen ? size : buflen;
+    memcpy(buf, data, len);
+    return len;
+  }
+
+  Local<String> str;
+
+  if (is_buffer) { // slow path, convert to binary string
+    Local<Value> arg = String::New("binary");
+    str = MakeCallback(val.As<Object>(), "toString", 1, &arg)->ToString();
+  }
+  else {
+    str = val->ToString();
+  }
 
   if (encoding == UTF8) {
     str->WriteUtf8(buf, buflen, NULL, String::HINT_MANY_WRITES_EXPECTED);
@@ -1843,13 +1867,6 @@ static Handle<Value> Binding(const Arguments& args) {
     DefineConstants(exports);
     binding_cache->Set(module, exports);
 
-#ifdef __POSIX__
-  } else if (!strcmp(*module_v, "io_watcher")) {
-    exports = Object::New();
-    IOWatcher::Initialize(exports);
-    binding_cache->Set(module, exports);
-#endif
-
   } else if (!strcmp(*module_v, "natives")) {
     exports = Object::New();
     DefineJavaScript(exports);
@@ -2375,20 +2392,36 @@ static void ParseArgs(int argc, char **argv) {
     } else if (strcmp(arg, "--help") == 0 || strcmp(arg, "-h") == 0) {
       PrintHelp();
       exit(0);
-    } else if (strcmp(arg, "--eval") == 0 || strcmp(arg, "-e") == 0 ||
-        strcmp(arg, "-pe") == 0) {
-      if (argc <= i + 1) {
-        fprintf(stderr, "Error: --eval requires an argument\n");
+    } else if (strcmp(arg, "--eval") == 0   ||
+               strcmp(arg, "-e") == 0       ||
+               strcmp(arg, "--print") == 0  ||
+               strcmp(arg, "-pe") == 0      ||
+               strcmp(arg, "-p") == 0) {
+      bool is_eval = strchr(arg, 'e') != NULL;
+      bool is_print = strchr(arg, 'p') != NULL;
+
+      // argument to -p and --print is optional
+      if (is_eval == true && i + 1 >= argc) {
+        fprintf(stderr, "Error: %s requires an argument\n", arg);
         exit(1);
       }
-      if (arg[1] == 'p') {
-        print_eval = true;
+
+      print_eval = print_eval || is_print;
+      argv[i] = const_cast<char*>("");
+
+      // --eval, -e and -pe always require an argument
+      if (is_eval == true) {
+        eval_string = argv[++i];
+        continue;
       }
-      argv[i] = const_cast<char*>("");
+
+      // next arg is the expression to evaluate unless it starts with:
+      //  - a dash, then it's another switch
+      //  - "\\-", then it's an escaped expression, drop the backslash
+      if (argv[i + 1] == NULL) continue;
+      if (argv[i + 1][0] == '-') continue;
       eval_string = argv[++i];
-    } else if (strcmp(arg, "--print") == 0 || strcmp(arg, "-p") == 0) {
-      print_eval = true;
-      argv[i] = const_cast<char*>("");
+      if (strncmp(eval_string, "\\-", 2) == 0) ++eval_string;
     } else if (strcmp(arg, "--interactive") == 0 || strcmp(arg, "-i") == 0) {
       force_repl = true;
       argv[i] = const_cast<char*>("");

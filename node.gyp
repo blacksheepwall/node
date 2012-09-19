@@ -87,6 +87,7 @@
         'src/node_string.cc',
         'src/node_zlib.cc',
         'src/pipe_wrap.cc',
+        'src/signal_wrap.cc',
         'src/stream_wrap.cc',
         'src/slab_allocator.cc',
         'src/tcp_wrap.cc',
@@ -204,10 +205,6 @@
           'libraries': [ '-lpsapi.lib' ]
         }, { # POSIX
           'defines': [ '__POSIX__' ],
-          'sources': [
-            'src/node_signal_watcher.cc',
-            'src/node_io_watcher.cc',
-          ],
         }],
         [ 'OS=="mac"', {
           'libraries': [ '-framework Carbon' ],
@@ -229,6 +226,14 @@
           'libraries': [
             '-lkstat',
             '-lumem',
+          ],
+          'defines!': [
+            'PLATFORM="solaris"',
+          ],
+          'defines': [
+            # we need to use node's preferred "sunos"
+            # rather than gyp's preferred "solaris"
+            'PLATFORM="sunos"',
           ],
         }],
       ],

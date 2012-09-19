@@ -3,7 +3,13 @@ Evented I/O for V8 javascript. [![Build Status](https://secure.travis-ci.org/joy
 
 ### To build:
 
-Unix/Macintosh. Requires python 2.6 or 2.7 and GNU make 3.81 or newer:
+Prerequisites (Unix only):
+
+    * Python 2.6 or 2.7
+    * GNU Make 3.81 or newer
+    * libexecinfo (FreeBSD and OpenBSD only)
+
+Unix/Macintosh:
 
     ./configure
     make
@@ -34,9 +40,9 @@ Windows:
 Resources for Newcomers
 ---
   - [nodeapi](http://nodejsapi.cloudfoundry.com/)
-  - [node 缂栫爜瑙勮寖](https://github.com/sdg-sysdev/node/wiki/node-%E7%BC%96%E7%A0%81%E8%A7%84%E8%8C%83)
-  - [NodeJs 瀛︿範鏃ヨ](http://neekey.net/wiki/doku.php?id=nodejs)
-  - [Node 鍏ラ棬](http://www.nodebeginner.org/index-zh-cn.html)
+  - [node 编码规范](https://github.com/sdg-sysdev/node/wiki/node-%E7%BC%96%E7%A0%81%E8%A7%84%E8%8C%83)
+  - [NodeJs 学习日记](http://neekey.net/wiki/doku.php?id=nodejs)
+  - [Node 入门](http://www.nodebeginner.org/index-zh-cn.html)
   - [The Wiki](https://github.com/joyent/node/wiki)
   - [nodejs.org](http://nodejs.org/)
   - [how to install node.js and npm (node package manager)](http://joyeur.com/2010/12/10/installing-node-and-npm/)
