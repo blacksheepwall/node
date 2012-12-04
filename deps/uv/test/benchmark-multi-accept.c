@@ -204,10 +204,6 @@ static void send_listen_handles(uv_handle_type type,
     ASSERT(0 == uv_tcp_init(loop, (uv_tcp_t*) &ctx.server_handle));
     ASSERT(0 == uv_tcp_bind((uv_tcp_t*) &ctx.server_handle, listen_addr));
   }
-  else if (type == UV_NAMED_PIPE) {
-    ASSERT(0 == uv_pipe_init(loop, (uv_pipe_t*) &ctx.server_handle, 0));
-    ASSERT(0 == uv_pipe_bind((uv_pipe_t*) &ctx.server_handle, IPC_PIPE_NAME));
-  }
   else
     ASSERT(0);
 
@@ -415,8 +411,8 @@ static int test_tcp(unsigned int num_servers, unsigned int num_clients) {
 
   free(clients);
   free(servers);
-  uv_loop_delete(uv_default_loop()); /* Silence valgrind. */
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 

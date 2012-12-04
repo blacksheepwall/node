@@ -21,6 +21,21 @@
 #include "uv.h"
 #include "internal.h"
 
+#if TARGET_OS_IPHONE
+
+/* iOS (currently) doesn't provide the FSEvents-API (nor CoreServices) */
+
+int uv__fsevents_init(uv_fs_event_t* handle) {
+  return 0;
+}
+
+
+int uv__fsevents_close(uv_fs_event_t* handle) {
+  return 0;
+}
+
+#else /* TARGET_OS_IPHONE */
+
 #include <assert.h>
 #include <stdlib.h>
 #include <CoreServices/CoreServices.h>
@@ -66,17 +81,14 @@ void uv__fsevents_cb(uv_async_t* cb, int status) {
   handle = cb->data;
 
   UV__FSEVENTS_WALK(handle, {
-    if (handle->fd != -1) {
-#ifdef MAC_OS_X_VERSION_10_7
-      handle->cb(handle, event->path, event->events, 0);
-#else
-      handle->cb(handle, NULL, event->events, 0);
-#endif /* MAC_OS_X_VERSION_10_7 */
-    }
-  })
+    if (handle->event_watcher.fd != -1)
+      handle->cb(handle, event->path[0] ? event->path : NULL, event->events, 0);
+  });
 
-  if ((handle->flags & (UV_CLOSING | UV_CLOSED)) == 0 && handle->fd == -1)
+  if ((handle->flags & (UV_CLOSING | UV_CLOSED)) == 0 &&
+      handle->event_watcher.fd == -1) {
     uv__fsevents_close(handle);
+  }
 }
 
 
@@ -94,6 +106,17 @@ void uv__fsevents_event_cb(ConstFSEventStreamRef streamRef,
   uv_fs_event_t* handle;
   uv__fsevents_event_t* event;
   ngx_queue_t add_list;
+  int kFSEventsModified;
+  int kFSEventsRenamed;
+
+  kFSEventsModified = kFSEventStreamEventFlagItemFinderInfoMod |
+                      kFSEventStreamEventFlagItemModified |
+                      kFSEventStreamEventFlagItemInodeMetaMod |
+                      kFSEventStreamEventFlagItemChangeOwner |
+                      kFSEventStreamEventFlagItemXattrMod;
+  kFSEventsRenamed = kFSEventStreamEventFlagItemCreated |
+                     kFSEventStreamEventFlagItemRemoved |
+                     kFSEventStreamEventFlagItemRenamed;
 
   handle = info;
   paths = eventPaths;
@@ -151,7 +174,8 @@ void uv__fsevents_event_cb(ConstFSEventStreamRef streamRef,
 
     memcpy(event->path, path, len + 1);
 
-    if (eventFlags[i] & kFSEventStreamEventFlagItemModified)
+    if ((eventFlags[i] & kFSEventsModified) != 0 &&
+        (eventFlags[i] & kFSEventsRenamed) == 0)
       event->events = UV_CHANGE;
     else
       event->events = UV_RENAME;
@@ -271,3 +295,5 @@ int uv__fsevents_close(uv_fs_event_t* handle) {
 
   return 0;
 }
+
+#endif /* TARGET_OS_IPHONE */

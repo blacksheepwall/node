@@ -1,4 +1,4 @@
-# Copyright 2011 the V8 project authors. All rights reserved.
+# Copyright 2012 the V8 project authors. All rights reserved.
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are
 # met:
@@ -48,7 +48,11 @@
     # both for the snapshot and for the ARM target. Leaving the default value
     # of 'false' will avoid VFP instructions in the snapshot and use CPU feature
     # probing when running on the target.
-    'v8_can_use_vfp_instructions%': 'false',
+    'v8_can_use_vfp2_instructions%': 'false',
+    'v8_can_use_vfp3_instructions%': 'false',
+
+    # Similar to vfp but on MIPS.
+    'v8_can_use_fpu_instructions%': 'true',
 
     # Setting v8_use_arm_eabi_hardfloat to true will turn on V8 support for ARM
     # EABI calling convention where double arguments are passed in VFP
@@ -56,14 +60,28 @@
     # well when compiling for the ARM target.
     'v8_use_arm_eabi_hardfloat%': 'false',
 
+    # Similar to the ARM hard float ABI but on MIPS.
+    'v8_use_mips_abi_hardfloat%': 'true',
+
+    # Default arch variant for MIPS.
+    'mips_arch_variant%': 'mips32r2',
+
     'v8_enable_debugger_support%': 1,
 
     'v8_enable_disassembler%': 0,
+
+    # Enable extra checks in API functions and other strategic places.
+    'v8_enable_extra_checks%': 1,
+
+    'v8_object_print%': 0,
 
     'v8_enable_gdbjit%': 0,
 
     # Enable profiling support. Only required on Windows.
     'v8_enable_prof%': 0,
+
+    # Some versions of GCC 4.5 seem to need -fno-strict-aliasing.
+    'v8_no_strict_aliasing%': 0,
 
     # Chrome needs this definition unconditionally. For standalone V8 builds,
     # it's handled in build/standalone.gypi.
@@ -72,9 +90,22 @@
     'v8_use_snapshot%': 'true',
     'host_os%': '<(OS)',
     'v8_use_liveobjectlist%': 'false',
+    'werror%': '-Werror',
+
+    # With post mortem support enabled, metadata is embedded into libv8 that
+    # describes various parameters of the VM for use by debuggers. See
+    # tools/gen-postmortem-metadata.py for details.
+    'v8_postmortem_support%': 'false',
 
     # For a shared library build, results in "libv8-<(soname_version).so".
     'soname_version%': '',
+
+    # Interpreted regexp engine exists as platform-independent alternative
+    # based where the regular expression is compiled to a bytecode.
+    'v8_interpreted_regexp%': 0,
+
+    # Name of the python executable.
+    'python%': 'python',
   },
   'target_defaults': {
     'conditions': [
@@ -84,78 +115,135 @@
       ['v8_enable_disassembler==1', {
         'defines': ['ENABLE_DISASSEMBLER',],
       }],
+      ['v8_enable_extra_checks==1', {
+        'defines': ['ENABLE_EXTRA_CHECKS',],
+      }],
+      ['v8_object_print==1', {
+        'defines': ['OBJECT_PRINT',],
+      }],
       ['v8_enable_gdbjit==1', {
         'defines': ['ENABLE_GDB_JIT_INTERFACE',],
       }],
-      ['OS!="mac"', {
-        # TODO(mark): The OS!="mac" conditional is temporary. It can be
-        # removed once the Mac Chromium build stops setting target_arch to
-        # ia32 and instead sets it to mac. Other checks in this file for
-        # OS=="mac" can be removed at that time as well. This can be cleaned
-        # up once http://crbug.com/44205 is fixed.
+      ['v8_interpreted_regexp==1', {
+        'defines': ['V8_INTERPRETED_REGEXP',],
+      }],
+      ['v8_target_arch=="arm"', {
+        'defines': [
+          'V8_TARGET_ARCH_ARM',
+        ],
         'conditions': [
-          ['v8_target_arch=="arm"', {
+          [ 'v8_can_use_unaligned_accesses=="true"', {
             'defines': [
-              'V8_TARGET_ARCH_ARM',
+              'CAN_USE_UNALIGNED_ACCESSES=1',
             ],
-            'conditions': [
-              [ 'v8_can_use_unaligned_accesses=="true"', {
-                'defines': [
-                  'CAN_USE_UNALIGNED_ACCESSES=1',
-                ],
+          }],
+          [ 'v8_can_use_unaligned_accesses=="false"', {
+            'defines': [
+              'CAN_USE_UNALIGNED_ACCESSES=0',
+            ],
+          }],
+          [ 'v8_can_use_vfp2_instructions=="true"', {
+            'defines': [
+              'CAN_USE_VFP2_INSTRUCTIONS',
+            ],
+          }],
+          [ 'v8_can_use_vfp3_instructions=="true"', {
+            'defines': [
+              'CAN_USE_VFP3_INSTRUCTIONS',
+            ],
+          }],
+          [ 'v8_use_arm_eabi_hardfloat=="true"', {
+            'defines': [
+              'USE_EABI_HARDFLOAT=1',
+              'CAN_USE_VFP3_INSTRUCTIONS',
+            ],
+            'target_conditions': [
+              ['_toolset=="target"', {
+                'cflags': ['-mfloat-abi=hard',],
               }],
-              [ 'v8_can_use_unaligned_accesses=="false"', {
-                'defines': [
-                  'CAN_USE_UNALIGNED_ACCESSES=0',
-                ],
-              }],
-              [ 'v8_can_use_vfp_instructions=="true"', {
-                'defines': [
-                  'CAN_USE_VFP_INSTRUCTIONS',
-                ],
-              }],
-              [ 'v8_use_arm_eabi_hardfloat=="true"', {
-                'defines': [
-                  'USE_EABI_HARDFLOAT=1',
-                  'CAN_USE_VFP_INSTRUCTIONS',
-                ],
-                'cflags': [
-                  '-mfloat-abi=hard',
-                ],
-              }, {
-                'defines': [
-                  'USE_EABI_HARDFLOAT=0',
-                ],
-              }],
-              # The ARM assembler assumes the host is 32 bits,
-              # so force building 32-bit host tools.
-              ['host_arch=="x64"', {
-                'target_conditions': [
-                  ['_toolset=="host"', {
-                    'cflags': ['-m32'],
-                    'ldflags': ['-m32'],
+            ],
+          }, {
+            'defines': [
+              'USE_EABI_HARDFLOAT=0',
+            ],
+          }],
+        ],
+      }],  # v8_target_arch=="arm"
+      ['v8_target_arch=="ia32"', {
+        'defines': [
+          'V8_TARGET_ARCH_IA32',
+        ],
+      }],  # v8_target_arch=="ia32"
+      ['v8_target_arch=="mipsel"', {
+        'defines': [
+          'V8_TARGET_ARCH_MIPS',
+        ],
+        'variables': {
+          'mipscompiler': '<!($(echo ${CXX:-$(which g++)}) -v 2>&1 | grep -q "^Target: mips" && echo "yes" || echo "no")',
+        },
+        'conditions': [
+          ['mipscompiler=="yes"', {
+            'target_conditions': [
+              ['_toolset=="target"', {
+                'cflags': ['-EL'],
+                'ldflags': ['-EL'],
+                'conditions': [
+                  [ 'v8_use_mips_abi_hardfloat=="true"', {
+                    'cflags': ['-mhard-float'],
+                    'ldflags': ['-mhard-float'],
+                  }, {
+                    'cflags': ['-msoft-float'],
+                    'ldflags': ['-msoft-float'],
+                  }],
+                  ['mips_arch_variant=="mips32r2"', {
+                    'cflags': ['-mips32r2', '-Wa,-mips32r2'],
+                  }],
+                  ['mips_arch_variant=="loongson"', {
+                    'cflags': ['-mips3', '-Wa,-mips3'],
+                  }, {
+                    'cflags': ['-mips32', '-Wa,-mips32'],
                   }],
                 ],
               }],
             ],
           }],
-          ['v8_target_arch=="ia32"', {
+          [ 'v8_can_use_fpu_instructions=="true"', {
             'defines': [
-              'V8_TARGET_ARCH_IA32',
+              'CAN_USE_FPU_INSTRUCTIONS',
             ],
           }],
-          ['v8_target_arch=="mips"', {
+          [ 'v8_use_mips_abi_hardfloat=="true"', {
             'defines': [
-              'V8_TARGET_ARCH_MIPS',
+              '__mips_hard_float=1',
+              'CAN_USE_FPU_INSTRUCTIONS',
+            ],
+          }, {
+            'defines': [
+              '__mips_soft_float=1'
             ],
           }],
-          ['v8_target_arch=="x64"', {
-            'defines': [
-              'V8_TARGET_ARCH_X64',
-            ],
+          ['mips_arch_variant=="mips32r2"', {
+            'defines': ['_MIPS_ARCH_MIPS32R2',],
+          }],
+          ['mips_arch_variant=="loongson"', {
+            'defines': ['_MIPS_ARCH_LOONGSON',],
           }],
         ],
-      }],
+      }],  # v8_target_arch=="mipsel"
+      ['v8_target_arch=="x64"', {
+        'defines': [
+          'V8_TARGET_ARCH_X64',
+        ],
+        'xcode_settings': {
+          'ARCHS': [ 'x86_64' ],
+        },
+        'msvs_settings': {
+          'VCLinkerTool': {
+            'StackReserveSize': '2097152',
+          },
+        },
+        'msvs_configuration_platform': 'x64',
+      }],  # v8_target_arch=="x64"
       ['v8_use_liveobjectlist=="true"', {
         'defines': [
           'ENABLE_DEBUGGER_SUPPORT',
@@ -169,6 +257,16 @@
           'COMPRESS_STARTUP_DATA_BZ2',
         ],
       }],
+      ['OS=="win"', {
+        'defines': [
+          'WIN32',
+        ],
+        'msvs_configuration_attributes': {
+          'OutputDirectory': '<(DEPTH)\\build\\$(ConfigurationName)',
+          'IntermediateDirectory': '$(OutDir)\\obj\\$(ProjectName)',
+          'CharacterSet': '1',
+        },
+      }],
       ['OS=="win" and v8_enable_prof==1', {
         'msvs_settings': {
           'VCLinkerTool': {
@@ -176,15 +274,52 @@
           },
         },
       }],
-      ['OS=="linux" or OS=="freebsd" or OS=="openbsd" or OS=="solaris"', {
+      ['OS in "linux freebsd dragonflybsd openbsd solaris netbsd".split()', {
         'conditions': [
-          [ 'target_arch=="ia32"', {
-            'cflags': [ '-m32' ],
-            'ldflags': [ '-m32' ],
+          [ 'v8_no_strict_aliasing==1', {
+            'cflags': [ '-fno-strict-aliasing' ],
+          }],
+        ],  # conditions
+      }],
+      ['OS=="solaris"', {
+        'defines': [ '__C99FEATURES__=1' ],  # isinf() etc.
+      }],
+      ['(OS=="linux" or OS=="freebsd" or OS=="dragonflybsd" or OS=="openbsd" \
+         or OS=="solaris" or OS=="netbsd" or OS=="mac" or OS=="android") and \
+        (v8_target_arch=="arm" or v8_target_arch=="ia32" or \
+         v8_target_arch=="mipsel")', {
+        # Check whether the host compiler and target compiler support the
+        # '-m32' option and set it if so.
+        'target_conditions': [
+          ['_toolset=="host"', {
+            'variables': {
+              'm32flag': '<!((echo | $(echo ${CXX_host:-$(which g++)}) -m32 -E - > /dev/null 2>&1) && echo "-m32" || true)',
+            },
+            'cflags': [ '<(m32flag)' ],
+            'ldflags': [ '<(m32flag)' ],
+            'xcode_settings': {
+              'ARCHS': [ 'i386' ],
+            },
+          }],
+          ['_toolset=="target"', {
+            'variables': {
+              'm32flag': '<!((echo | $(echo ${CXX_target:-${CXX:-$(which g++)}}) -m32 -E - > /dev/null 2>&1) && echo "-m32" || true)',
+            },
+            'cflags': [ '<(m32flag)' ],
+            'ldflags': [ '<(m32flag)' ],
+            'xcode_settings': {
+              'ARCHS': [ 'i386' ],
+            },
           }],
         ],
       }],
-    ],
+      ['OS=="freebsd" or OS=="dragonflybsd" or OS=="openbsd"', {
+        'cflags': [ '-I/usr/local/include' ],
+      }],
+      ['OS=="netbsd"', {
+        'cflags': [ '-I/usr/pkg/include' ],
+      }],
+    ],  # conditions
     'configurations': {
       'Debug': {
         'defines': [
@@ -207,46 +342,41 @@
           },
           'VCLinkerTool': {
             'LinkIncremental': '2',
-            # For future reference, the stack size needs to be increased
-            # when building for Windows 64-bit, otherwise some test cases
-            # can cause stack overflow.
-            # 'StackReserveSize': '297152',
           },
         },
         'conditions': [
-          ['OS=="freebsd" or OS=="openbsd"', {
-            'cflags': [ '-I/usr/local/include' ],
+          ['OS in "linux freebsd dragonflybsd openbsd netbsd".split()', {
+            'cflags': [ '-Wall', '<(werror)', '-W', '-Wno-unused-parameter',
+                        '-Wnon-virtual-dtor', '-Woverloaded-virtual' ],
           }],
-          ['OS=="linux" or OS=="freebsd" or OS=="openbsd"', {
-            'cflags': [ '-Wall', '-Werror', '-W', '-Wno-unused-parameter',
-                        '-Wnon-virtual-dtor' ],
+          ['OS=="android"', {
+            'variables': {
+              'android_full_debug%': 1,
+            },
+            'conditions': [
+              ['android_full_debug==0', {
+                # Disable full debug if we want a faster v8 in a debug build.
+                # TODO(2304): pass DISABLE_DEBUG_ASSERT instead of hiding DEBUG.
+                'defines!': [
+                  'DEBUG',
+                ],
+              }],
+            ],
           }],
         ],
-      },
+      },  # Debug
       'Release': {
         'conditions': [
-          ['OS=="linux" or OS=="freebsd" or OS=="openbsd"', {
-            'cflags!': [
-              '-O2',
-              '-Os',
-            ],
-            'cflags': [
-              '-fdata-sections',
-              '-ffunction-sections',
-              '-fomit-frame-pointer',
-              '-O3',
-            ],
+          ['OS=="linux" or OS=="freebsd" or OS=="dragonflybsd" \
+            or OS=="openbsd" or OS=="netbsd" or OS=="android"', {
             'conditions': [
-              [ 'gcc_version==44', {
+              [ 'gcc_version==44 and clang==0', {
                 'cflags': [
                   # Avoid crashes with gcc 4.4 in the v8 test suite.
                   '-fno-tree-vrp',
                 ],
               }],
             ],
-          }],
-          ['OS=="freebsd" or OS=="openbsd"', {
-            'cflags': [ '-I/usr/local/include' ],
           }],
           ['OS=="mac"', {
             'xcode_settings': {
@@ -258,44 +388,36 @@
               # is specified explicitly.
               'GCC_STRICT_ALIASING': 'YES',
             },
-          }],
+          }],  # OS=="mac"
           ['OS=="win"', {
-            'msvs_configuration_attributes': {
-              'OutputDirectory': '$(SolutionDir)$(ConfigurationName)',
-              'IntermediateDirectory': '$(OutDir)\\obj\\$(ProjectName)',
-              'CharacterSet': '1',
-            },
             'msvs_settings': {
               'VCCLCompilerTool': {
                 'Optimization': '2',
                 'InlineFunctionExpansion': '2',
                 'EnableIntrinsicFunctions': 'true',
                 'FavorSizeOrSpeed': '0',
-                'OmitFramePointers': 'true',
                 'StringPooling': 'true',
-
                 'conditions': [
                   ['OS=="win" and component=="shared_library"', {
                     'RuntimeLibrary': '2',  #/MD
                   }, {
                     'RuntimeLibrary': '0',  #/MT
                   }],
+                  ['v8_target_arch=="x64"', {
+                    # TODO(2207): remove this option once the bug is fixed.
+                    'WholeProgramOptimization': 'true',
+                  }],
                 ],
               },
               'VCLinkerTool': {
                 'LinkIncremental': '1',
                 'OptimizeReferences': '2',
-                'OptimizeForWindows98': '1',
                 'EnableCOMDATFolding': '2',
-                # For future reference, the stack size needs to be
-                # increased when building for Windows 64-bit, otherwise
-                # some test cases can cause stack overflow.
-                # 'StackReserveSize': '297152',
               },
             },
-          }],
-        ],
-      },
-    },
-  },
+          }],  # OS=="win"
+        ],  # conditions
+      },  # Release
+    },  # configurations
+  },  # target_defaults
 }

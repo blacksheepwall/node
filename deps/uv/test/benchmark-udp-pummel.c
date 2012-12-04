@@ -43,7 +43,8 @@ struct receiver_state {
   uv_udp_t udp_handle;
 };
 
-static unsigned int packet_counter = 1e6; /* not used in timed mode */
+/* not used in timed mode */
+static unsigned int packet_counter = (unsigned int) 1e6;
 
 static int n_senders_;
 static int n_receivers_;
@@ -55,6 +56,7 @@ static unsigned int send_cb_called;
 static unsigned int recv_cb_called;
 static unsigned int close_cb_called;
 static int timed;
+static int exiting;
 
 
 static uv_buf_t alloc_cb(uv_handle_t* handle, size_t suggested_size) {
@@ -71,9 +73,12 @@ static void send_cb(uv_udp_send_t* req, int status) {
 
   if (status != 0) {
     ASSERT(status == -1);
-    ASSERT(uv_last_error(req->handle->loop).code == UV_EINTR);
+    ASSERT(uv_last_error(req->handle->loop).code == UV_ECANCELED);
     return;
   }
+
+  if (exiting)
+    return;
 
   s = container_of(req, struct sender_state, send_req);
   ASSERT(req->handle == &s->udp_handle);
@@ -128,6 +133,8 @@ static void close_cb(uv_handle_t* handle) {
 static void timeout_cb(uv_timer_t* timer, int status) {
   int i;
 
+  exiting = 1;
+
   for (i = 0; i < n_senders_; i++)
     uv_close((uv_handle_t*)&senders[i].udp_handle, close_cb);
 
@@ -136,13 +143,13 @@ static void timeout_cb(uv_timer_t* timer, int status) {
 }
 
 
-static int do_packet_storm(int n_senders,
-                           int n_receivers,
-                           unsigned long timeout) {
+static int pummel(unsigned int n_senders,
+                  unsigned int n_receivers,
+                  unsigned long timeout) {
   uv_timer_t timer_handle;
   uint64_t duration;
   uv_loop_t* loop;
-  int i;
+  unsigned int i;
 
   ASSERT(n_senders <= ARRAY_SIZE(senders));
   ASSERT(n_receivers <= ARRAY_SIZE(receivers));
@@ -190,9 +197,10 @@ static int do_packet_storm(int n_senders,
   duration = uv_hrtime();
   ASSERT(0 == uv_run(loop));
   duration = uv_hrtime() - duration;
-  duration = duration / 1e6; /* convert from nanoseconds to milliseconds */
+  /* convert from nanoseconds to milliseconds */
+  duration = duration / (uint64_t) 1e6;
 
-  printf("udp_packet_storm_%dv%d: %.0f/s received, %.0f/s sent. "
+  printf("udp_pummel_%dv%d: %.0f/s received, %.0f/s sent. "
          "%u received, %u sent in %.1f seconds.\n",
          n_receivers,
          n_senders,
@@ -202,16 +210,17 @@ static int do_packet_storm(int n_senders,
          send_cb_called,
          duration / 1000.0);
 
+  MAKE_VALGRIND_HAPPY();
   return 0;
 }
 
 
 #define X(a, b)                                                               \
   BENCHMARK_IMPL(udp_pummel_##a##v##b) {                                      \
-    return do_packet_storm(a, b, 0);                                          \
+    return pummel(a, b, 0);                                                   \
   }                                                                           \
   BENCHMARK_IMPL(udp_timed_pummel_##a##v##b) {                                \
-    return do_packet_storm(a, b, TEST_DURATION);                              \
+    return pummel(a, b, TEST_DURATION);                                       \
   }
 
 X(1, 1)

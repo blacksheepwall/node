@@ -651,7 +651,96 @@ var parseTests = {
     'hash': '#abc',
     'pathname': '/a/b',
     'path': '/a/b?a=b'
-  }
+  },
+
+  'http://-lovemonsterz.tumblr.com/rss': {
+    'protocol': 'http:',
+    'slashes': true,
+    'host': '-lovemonsterz.tumblr.com',
+    'hostname': '-lovemonsterz.tumblr.com',
+    'href': 'http://-lovemonsterz.tumblr.com/rss',
+    'pathname': '/rss',
+    'path': '/rss',
+  },
+
+  'http://-lovemonsterz.tumblr.com:80/rss': {
+    'protocol': 'http:',
+    'slashes': true,
+    'port': '80',
+    'host': '-lovemonsterz.tumblr.com:80',
+    'hostname': '-lovemonsterz.tumblr.com',
+    'href': 'http://-lovemonsterz.tumblr.com:80/rss',
+    'pathname': '/rss',
+    'path': '/rss',
+  },
+
+  'http://user:pass@-lovemonsterz.tumblr.com/rss': {
+    'protocol': 'http:',
+    'slashes': true,
+    'auth': 'user:pass',
+    'host': '-lovemonsterz.tumblr.com',
+    'hostname': '-lovemonsterz.tumblr.com',
+    'href': 'http://user:pass@-lovemonsterz.tumblr.com/rss',
+    'pathname': '/rss',
+    'path': '/rss',
+  },
+
+  'http://user:pass@-lovemonsterz.tumblr.com:80/rss': {
+    'protocol': 'http:',
+    'slashes': true,
+    'auth': 'user:pass',
+    'port': '80',
+    'host': '-lovemonsterz.tumblr.com:80',
+    'hostname': '-lovemonsterz.tumblr.com',
+    'href': 'http://user:pass@-lovemonsterz.tumblr.com:80/rss',
+    'pathname': '/rss',
+    'path': '/rss',
+  },
+
+  'http://_jabber._tcp.google.com/test': {
+    'protocol': 'http:',
+    'slashes': true,
+    'host': '_jabber._tcp.google.com',
+    'hostname': '_jabber._tcp.google.com',
+    'href': 'http://_jabber._tcp.google.com/test',
+    'pathname': '/test',
+    'path': '/test',
+  },
+
+  'http://user:pass@_jabber._tcp.google.com/test': {
+    'protocol': 'http:',
+    'slashes': true,
+    'auth': 'user:pass',
+    'host': '_jabber._tcp.google.com',
+    'hostname': '_jabber._tcp.google.com',
+    'href': 'http://user:pass@_jabber._tcp.google.com/test',
+    'pathname': '/test',
+    'path': '/test',
+  },
+
+  'http://_jabber._tcp.google.com:80/test': {
+    'protocol': 'http:',
+    'slashes': true,
+    'port': '80',
+    'host': '_jabber._tcp.google.com:80',
+    'hostname': '_jabber._tcp.google.com',
+    'href': 'http://_jabber._tcp.google.com:80/test',
+    'pathname': '/test',
+    'path': '/test',
+  },
+
+  'http://user:pass@_jabber._tcp.google.com:80/test': {
+    'protocol': 'http:',
+    'slashes': true,
+    'auth': 'user:pass',
+    'port': '80',
+    'host': '_jabber._tcp.google.com:80',
+    'hostname': '_jabber._tcp.google.com',
+    'href': 'http://user:pass@_jabber._tcp.google.com:80/test',
+    'pathname': '/test',
+    'path': '/test',
+  },
+
 };
 
 for (var u in parseTests) {
@@ -854,6 +943,50 @@ var formatTests = {
     'protocol': 'coap',
     'host': '[fedc:ba98:7654:3210:fedc:ba98:7654:3210]:61616',
     'pathname': '/s/stopButton'
+  },
+
+  // encode context-specific delimiters in path and query, but do not touch
+  // other non-delimiter chars like `%`.
+  // <https://github.com/joyent/node/issues/4082>
+
+  // `#`,`?` in path
+  '/path/to/%%23%3F+=&.txt?foo=theA1#bar' : {
+    href : '/path/to/%%23%3F+=&.txt?foo=theA1#bar',
+    pathname: '/path/to/%#?+=&.txt',
+    query: {
+      foo: 'theA1'
+    },
+    hash: "#bar"
+  },
+
+  // `#`,`?` in path + `#` in query
+  '/path/to/%%23%3F+=&.txt?foo=the%231#bar' : {
+    href : '/path/to/%%23%3F+=&.txt?foo=the%231#bar',
+    pathname: '/path/to/%#?+=&.txt',
+    query: {
+      foo: 'the#1'
+    },
+    hash: "#bar"
+  },
+
+  // `?` and `#` in path and search
+  'http://ex.com/foo%3F100%m%23r?abc=the%231?&foo=bar#frag': {
+    href: 'http://ex.com/foo%3F100%m%23r?abc=the%231?&foo=bar#frag',
+    protocol: 'http:',
+    hostname: 'ex.com',
+    hash: '#frag',
+    search: '?abc=the#1?&foo=bar',
+    pathname: '/foo?100%m#r',
+  },
+
+  // `?` and `#` in search only
+  'http://ex.com/fooA100%mBr?abc=the%231?&foo=bar#frag': {
+    href: 'http://ex.com/fooA100%mBr?abc=the%231?&foo=bar#frag',
+    protocol: 'http:',
+    hostname: 'ex.com',
+    hash: '#frag',
+    search: '?abc=the#1?&foo=bar',
+    pathname: '/fooA100%mBr',
   }
 };
 for (var u in formatTests) {

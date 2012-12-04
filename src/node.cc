@@ -27,8 +27,11 @@
 #include "uv.h"
 
 #include "v8-debug.h"
-#if defined HAVE_DTRACE || defined HAVE_ETW
+#if defined HAVE_DTRACE || defined HAVE_ETW || defined HAVE_SYSTEMTAP
 # include "node_dtrace.h"
+#endif
+#if defined HAVE_PERFCTR
+# include "node_counters.h"
 #endif
 
 #include <locale.h>
@@ -71,6 +74,9 @@ typedef int mode_t;
 #include "node_string.h"
 #if HAVE_OPENSSL
 # include "node_crypto.h"
+#endif
+#if HAVE_SYSTEMTAP
+#include "node_systemtap.h"
 #endif
 #include "node_script.h"
 #include "v8_typed_array.h"
@@ -1065,6 +1071,10 @@ enum encoding ParseEncoding(Handle<Value> encoding_v, enum encoding _default) {
     return UCS2;
   } else if (strcasecmp(*encoding, "ucs-2") == 0) {
     return UCS2;
+  } else if (strcasecmp(*encoding, "utf16le") == 0) {
+    return UCS2;
+  } else if (strcasecmp(*encoding, "utf-16le") == 0) {
+    return UCS2;
   } else if (strcasecmp(*encoding, "binary") == 0) {
     return BINARY;
   } else if (strcasecmp(*encoding, "buffer") == 0) {
@@ -1488,6 +1498,7 @@ static Handle<Value> SetGid(const Arguments& args) {
     struct group grp, *grpp = NULL;
     int err;
 
+    errno = 0;
     if ((err = getgrnam_r(*grpnam, &grp, getbuf, ARRAY_SIZE(getbuf), &grpp)) ||
         grpp == NULL) {
       if (errno == 0)
@@ -1528,6 +1539,7 @@ static Handle<Value> SetUid(const Arguments& args) {
     struct passwd pwd, *pwdp = NULL;
     int err;
 
+    errno = 0;
     if ((err = getpwnam_r(*pwnam, &pwd, getbuf, ARRAY_SIZE(getbuf), &pwdp)) ||
         pwdp == NULL) {
       if (errno == 0)
@@ -2301,8 +2313,12 @@ void Load(Handle<Object> process_l) {
   Local<Object> global = v8::Context::GetCurrent()->Global();
   Local<Value> args[1] = { Local<Value>::New(process_l) };
 
-#if defined HAVE_DTRACE || defined HAVE_ETW
+#if defined HAVE_DTRACE || defined HAVE_ETW || defined HAVE_SYSTEMTAP
   InitDTrace(global);
+#endif
+
+#if defined HAVE_PERFCTR
+  InitPerfCounters(global);
 #endif
 
   f->Call(global, 1, args);
@@ -2349,7 +2365,7 @@ static void PrintHelp() {
          "Options:\n"
          "  -v, --version        print node's version\n"
          "  -e, --eval script    evaluate script\n"
-         "  -p, --print          print result of --eval\n"
+         "  -p, --print          evaluate script and print result\n"
          "  -i, --interactive    always enter the REPL even if stdin\n"
          "                       does not appear to be a terminal\n"
          "  --no-deprecation     silence deprecation warnings\n"
@@ -2729,7 +2745,7 @@ char** Init(int argc, char *argv[]) {
     // a breakpoint on the first line of the startup script
     v8argc += 2;
     v8argv = new char*[v8argc];
-    memcpy(v8argv, argv, sizeof(argv) * option_end_index);
+    memcpy(v8argv, argv, sizeof(*argv) * option_end_index);
     v8argv[option_end_index] = const_cast<char*>("--expose_debug_as");
     v8argv[option_end_index + 1] = const_cast<char*>("v8debug");
   }
