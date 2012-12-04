@@ -1227,7 +1227,7 @@ i::Thread::Options SourceGroup::GetThreadOptions() {
 void SourceGroup::ExecuteInThread() {
   Isolate* isolate = Isolate::New();
   do {
-    if (next_semaphore_ != NULL) next_semaphore_->Wait();
+    if (!next_semaphore_.is_empty()) next_semaphore_->Wait();
     {
       Isolate::Scope iscope(isolate);
       Locker lock(isolate);
@@ -1239,15 +1239,15 @@ void SourceGroup::ExecuteInThread() {
       }
       context.Dispose();
     }
-    if (done_semaphore_ != NULL) done_semaphore_->Signal();
+    if (!done_semaphore_.is_empty()) done_semaphore_->Signal();
   } while (!Shell::options.last_run);
   isolate->Dispose();
 }
 
 
 void SourceGroup::StartExecuteInThread() {
-  if (thread_ == NULL) {
-    thread_ = new IsolateThread(this);
+  if (thread_.is_empty()) {
+    thread_ = i::SmartPointer<i::Thread>(new IsolateThread(this));
     thread_->Start();
   }
   next_semaphore_->Signal();
@@ -1255,7 +1255,7 @@ void SourceGroup::StartExecuteInThread() {
 
 
 void SourceGroup::WaitForThread() {
-  if (thread_ == NULL) return;
+  if (thread_.is_empty()) return;
   if (Shell::options.last_run) {
     thread_->Join();
   } else {

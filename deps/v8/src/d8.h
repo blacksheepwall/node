@@ -1,4 +1,4 @@
-// Copyright 2012 the V8 project authors. All rights reserved.
+// Copyright 2009 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -31,7 +31,7 @@
 #ifndef V8_SHARED
 #include "allocation.h"
 #include "hashmap.h"
-#include "smart-array-pointer.h"
+#include "smart-pointer.h"
 #include "v8.h"
 #else
 #include "../include/v8.h"
@@ -116,40 +116,16 @@ class CounterMap {
 #endif  // V8_SHARED
 
 
-class LineEditor {
- public:
-  enum Type { DUMB = 0, READLINE = 1 };
-  LineEditor(Type type, const char* name);
-  virtual ~LineEditor() { }
-
-  virtual Handle<String> Prompt(const char* prompt) = 0;
-  virtual bool Open() { return true; }
-  virtual bool Close() { return true; }
-  virtual void AddHistory(const char* str) { }
-
-  const char* name() { return name_; }
-  static LineEditor* Get();
- private:
-  Type type_;
-  const char* name_;
-  LineEditor* next_;
-  static LineEditor* first_;
-};
-
-
 class SourceGroup {
  public:
   SourceGroup() :
 #ifndef V8_SHARED
       next_semaphore_(v8::internal::OS::CreateSemaphore(0)),
       done_semaphore_(v8::internal::OS::CreateSemaphore(0)),
-      thread_(NULL),
 #endif  // V8_SHARED
       argv_(NULL),
       begin_offset_(0),
       end_offset_(0) {}
-
-  ~SourceGroup();
 
   void Begin(char** argv, int offset) {
     argv_ = const_cast<const char**>(argv);
@@ -181,9 +157,9 @@ class SourceGroup {
   static i::Thread::Options GetThreadOptions();
   void ExecuteInThread();
 
-  i::Semaphore* next_semaphore_;
-  i::Semaphore* done_semaphore_;
-  i::Thread* thread_;
+  i::SmartPointer<i::Semaphore> next_semaphore_;
+  i::SmartPointer<i::Semaphore> done_semaphore_;
+  i::SmartPointer<i::Thread> thread_;
 #endif  // V8_SHARED
 
   void ExitShell(int exit_code);
@@ -195,34 +171,12 @@ class SourceGroup {
 };
 
 
-class BinaryResource : public v8::String::ExternalAsciiStringResource {
- public:
-  BinaryResource(const char* string, int length)
-      : data_(string),
-        length_(length) { }
-
-  ~BinaryResource() {
-    delete[] data_;
-    data_ = NULL;
-    length_ = 0;
-  }
-
-  virtual const char* data() const { return data_; }
-  virtual size_t length() const { return length_; }
-
- private:
-  const char* data_;
-  size_t length_;
-};
-
-
 class ShellOptions {
  public:
   ShellOptions() :
 #ifndef V8_SHARED
      use_preemption(true),
      preemption_interval(10),
-     num_parallel_files(0),
      parallel_files(NULL),
 #endif  // V8_SHARED
      script_executed(false),
@@ -234,18 +188,10 @@ class ShellOptions {
      num_isolates(1),
      isolate_sources(NULL) { }
 
-  ~ShellOptions() {
-#ifndef V8_SHARED
-    delete[] parallel_files;
-#endif  // V8_SHARED
-    delete[] isolate_sources;
-  }
-
 #ifndef V8_SHARED
   bool use_preemption;
   int preemption_interval;
-  int num_parallel_files;
-  char** parallel_files;
+  i::List< i::Vector<const char> >* parallel_files;
 #endif  // V8_SHARED
   bool script_executed;
   bool last_run;
@@ -262,7 +208,6 @@ class Shell {
 #else
 class Shell : public i::AllStatic {
 #endif  // V8_SHARED
-
  public:
   static bool ExecuteString(Handle<String> source,
                             Handle<Value> name,
@@ -274,7 +219,6 @@ class Shell : public i::AllStatic {
   static Persistent<Context> CreateEvaluationContext();
   static int RunMain(int argc, char* argv[]);
   static int Main(int argc, char* argv[]);
-  static void Exit(int exit_code);
 
 #ifndef V8_SHARED
   static Handle<Array> GetCompletions(Handle<String> text,
@@ -287,13 +231,12 @@ class Shell : public i::AllStatic {
                                size_t buckets);
   static void AddHistogramSample(void* histogram, int sample);
   static void MapCounters(const char* name);
+#endif  // V8_SHARED
 
 #ifdef ENABLE_DEBUGGER_SUPPORT
   static Handle<Object> DebugMessageDetails(Handle<String> message);
   static Handle<Value> DebugCommandToJSONRequest(Handle<String> command);
-  static void DispatchDebugMessages();
-#endif  // ENABLE_DEBUGGER_SUPPORT
-#endif  // V8_SHARED
+#endif
 
 #ifdef WIN32
 #undef Yield
@@ -307,13 +250,8 @@ class Shell : public i::AllStatic {
   static Handle<Value> EnableProfiler(const Arguments& args);
   static Handle<Value> DisableProfiler(const Arguments& args);
   static Handle<Value> Read(const Arguments& args);
-  static Handle<Value> ReadBuffer(const Arguments& args);
-  static Handle<String> ReadFromStdin();
-  static Handle<Value> ReadLine(const Arguments& args) {
-    return ReadFromStdin();
-  }
+  static Handle<Value> ReadLine(const Arguments& args);
   static Handle<Value> Load(const Arguments& args);
-  static Handle<Value> ArrayBuffer(const Arguments& args);
   static Handle<Value> Int8Array(const Arguments& args);
   static Handle<Value> Uint8Array(const Arguments& args);
   static Handle<Value> Int16Array(const Arguments& args);
@@ -359,8 +297,9 @@ class Shell : public i::AllStatic {
   static Handle<Value> RemoveDirectory(const Arguments& args);
 
   static void AddOSMethods(Handle<ObjectTemplate> os_template);
-
-  static LineEditor* console;
+#ifndef V8_SHARED
+  static const char* kHistoryFileName;
+#endif  // V8_SHARED
   static const char* kPrompt;
   static ShellOptions options;
 
@@ -383,13 +322,34 @@ class Shell : public i::AllStatic {
   static void RunShell();
   static bool SetOptions(int argc, char* argv[]);
   static Handle<ObjectTemplate> CreateGlobalTemplate();
-  static Handle<Value> CreateExternalArrayBuffer(int32_t size);
-  static Handle<Value> CreateExternalArrayBuffer(const Arguments& args);
   static Handle<Value> CreateExternalArray(const Arguments& args,
                                            ExternalArrayType type,
-                                           int32_t element_size);
+                                           size_t element_size);
   static void ExternalArrayWeakCallback(Persistent<Value> object, void* data);
 };
+
+
+#ifndef V8_SHARED
+class LineEditor {
+ public:
+  enum Type { DUMB = 0, READLINE = 1 };
+  LineEditor(Type type, const char* name);
+  virtual ~LineEditor() { }
+
+  virtual i::SmartPointer<char> Prompt(const char* prompt) = 0;
+  virtual bool Open() { return true; }
+  virtual bool Close() { return true; }
+  virtual void AddHistory(const char* str) { }
+
+  const char* name() { return name_; }
+  static LineEditor* Get();
+ private:
+  Type type_;
+  const char* name_;
+  LineEditor* next_;
+  static LineEditor* first_;
+};
+#endif  // V8_SHARED
 
 
 }  // namespace v8
