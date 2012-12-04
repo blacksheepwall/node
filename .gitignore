@@ -18,7 +18,6 @@ node_g
 # various stuff that VC++ produces/uses
 Debug/
 Release/
-!doc/blog/**
 *.sln
 !nodemsi.sln
 *.suo
@@ -40,6 +39,6 @@ ipch/
 /npm.wxs
 /tools/msvs/npm.wixobj
 email.md
+blog.html
 deps/v8-*
 ./node_modules
-.svn/
