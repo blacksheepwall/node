@@ -182,3 +182,22 @@ assert.equal(uint8c[1], 255);
   var view = new DataView(array.buffer);
   for (var i = 128; i <= 255; ++i) assert.equal(view.getInt8(i - 128), i - 256);
 })();
+
+assert.throws(function() {
+  var buf = new DataView(new ArrayBuffer(8));
+  buf.getFloat64(0xffffffff, true);
+}, /Index out of range/);
+
+assert.throws(function() {
+  var buf = new DataView(new ArrayBuffer(8));
+  buf.setFloat64(0xffffffff, 0.0, true);
+}, /Index out of range/);
+
+// DataView::setGeneric() default endianness regression test,
+// see https://github.com/joyent/node/issues/4626
+(function() {
+  var buf = new Uint8Array(2);
+  var view = new DataView(buf);
+  view.setUint16(0, 1);
+  assert.equal(view.getUint16(0), 1);
+})();

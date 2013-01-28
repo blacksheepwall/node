@@ -217,7 +217,7 @@ Handle<Value> SecureContext::Init(const Arguments& args) {
   SSL_CTX_sess_set_new_cb(sc->ctx_, NewSessionCallback);
 
   sc->ca_store_ = NULL;
-  return True();
+  return True(node_isolate);
 }
 
 
@@ -333,7 +333,7 @@ Handle<Value> SecureContext::SetKey(const Arguments& args) {
   }
 
   BIO *bio = LoadBIO(args[0]);
-  if (!bio) return False();
+  if (!bio) return False(node_isolate);
 
   String::Utf8Value passphrase(args[1]);
 
@@ -356,7 +356,7 @@ Handle<Value> SecureContext::SetKey(const Arguments& args) {
   EVP_PKEY_free(key);
   BIO_free(bio);
 
-  return True();
+  return True(node_isolate);
 }
 
 
@@ -437,7 +437,7 @@ Handle<Value> SecureContext::SetCert(const Arguments& args) {
   }
 
   BIO* bio = LoadBIO(args[0]);
-  if (!bio) return False();
+  if (!bio) return False(node_isolate);
 
   int rv = SSL_CTX_use_certificate_chain(sc->ctx_, bio);
 
@@ -454,7 +454,7 @@ Handle<Value> SecureContext::SetCert(const Arguments& args) {
     return ThrowException(Exception::Error(String::New(string)));
   }
 
-  return True();
+  return True(node_isolate);
 }
 
 
@@ -474,7 +474,7 @@ Handle<Value> SecureContext::AddCACert(const Arguments& args) {
   }
 
   X509* x509 = LoadX509(args[0]);
-  if (!x509) return False();
+  if (!x509) return False(node_isolate);
 
   X509_STORE_add_cert(sc->ca_store_, x509);
   SSL_CTX_add_client_CA(sc->ctx_, x509);
@@ -485,7 +485,7 @@ Handle<Value> SecureContext::AddCACert(const Arguments& args) {
     SSL_CTX_set_cert_store(sc->ctx_, sc->ca_store_);
   }
 
-  return True();
+  return True(node_isolate);
 }
 
 
@@ -499,13 +499,13 @@ Handle<Value> SecureContext::AddCRL(const Arguments& args) {
   }
 
   BIO *bio = LoadBIO(args[0]);
-  if (!bio) return False();
+  if (!bio) return False(node_isolate);
 
   X509_CRL *x509 = PEM_read_bio_X509_CRL(bio, NULL, NULL, NULL);
 
   if (x509 == NULL) {
     BIO_free(bio);
-    return False();
+    return False(node_isolate);
   }
 
   X509_STORE_add_crl(sc->ca_store_, x509);
@@ -516,7 +516,7 @@ Handle<Value> SecureContext::AddCRL(const Arguments& args) {
   BIO_free(bio);
   X509_CRL_free(x509);
 
-  return True();
+  return True(node_isolate);
 }
 
 
@@ -536,14 +536,14 @@ Handle<Value> SecureContext::AddRootCerts(const Arguments& args) {
 
       if (!BIO_write(bp, root_certs[i], strlen(root_certs[i]))) {
         BIO_free(bp);
-        return False();
+        return False(node_isolate);
       }
 
       X509 *x509 = PEM_read_bio_X509(bp, NULL, NULL, NULL);
 
       if (x509 == NULL) {
         BIO_free(bp);
-        return False();
+        return False(node_isolate);
       }
 
       X509_STORE_add_cert(root_cert_store, x509);
@@ -556,7 +556,7 @@ Handle<Value> SecureContext::AddRootCerts(const Arguments& args) {
   sc->ca_store_ = root_cert_store;
   SSL_CTX_set_cert_store(sc->ctx_, sc->ca_store_);
 
-  return True();
+  return True(node_isolate);
 }
 
 
@@ -572,7 +572,7 @@ Handle<Value> SecureContext::SetCiphers(const Arguments& args) {
   String::Utf8Value ciphers(args[0]);
   SSL_CTX_set_cipher_list(sc->ctx_, *ciphers);
 
-  return True();
+  return True(node_isolate);
 }
 
 Handle<Value> SecureContext::SetOptions(const Arguments& args) {
@@ -586,7 +586,7 @@ Handle<Value> SecureContext::SetOptions(const Arguments& args) {
 
   SSL_CTX_set_options(sc->ctx_, args[0]->IntegerValue());
 
-  return True();
+  return True(node_isolate);
 }
 
 Handle<Value> SecureContext::SetSessionIdContext(const Arguments& args) {
@@ -618,14 +618,14 @@ Handle<Value> SecureContext::SetSessionIdContext(const Arguments& args) {
     return ThrowException(Exception::TypeError(message));
   }
 
-  return True();
+  return True(node_isolate);
 }
 
 Handle<Value> SecureContext::Close(const Arguments& args) {
   HandleScope scope;
   SecureContext *sc = ObjectWrap::Unwrap<SecureContext>(args.Holder());
   sc->FreeCTXMem();
-  return False();
+  return False(node_isolate);
 }
 
 //Takes .pfx or .p12 and password in string or buffer format
@@ -702,7 +702,7 @@ Handle<Value> SecureContext::LoadPKCS12(const Arguments& args) {
     return ThrowException(Exception::Error(String::New(str)));
   }
 
-  return True();
+  return True(node_isolate);
 }
 
 
@@ -948,11 +948,11 @@ void Connection::SetShutdownFlags() {
   int flags = SSL_get_shutdown(ssl_);
 
   if (flags & SSL_SENT_SHUTDOWN) {
-    handle_->Set(String::New("sentShutdown"), True());
+    handle_->Set(String::New("sentShutdown"), True(node_isolate));
   }
 
   if (flags & SSL_RECEIVED_SHUTDOWN) {
-    handle_->Set(String::New("receivedShutdown"), True());
+    handle_->Set(String::New("receivedShutdown"), True(node_isolate));
   }
 }
 
@@ -1082,7 +1082,7 @@ int Connection::SelectNextProtoCallback_(SSL *s,
     *outlen = 8;
 
     // set status unsupported
-    p->selectedNPNProto_ = Persistent<Value>::New(False());
+    p->selectedNPNProto_ = Persistent<Value>::New(False(node_isolate));
 
     return SSL_TLSEXT_ERR_OK;
   }
@@ -1095,7 +1095,7 @@ int Connection::SelectNextProtoCallback_(SSL *s,
 
   switch (status) {
     case OPENSSL_NPN_UNSUPPORTED:
-      p->selectedNPNProto_ = Persistent<Value>::New(Null());
+      p->selectedNPNProto_ = Persistent<Value>::New(Null(node_isolate));
       break;
     case OPENSSL_NPN_NEGOTIATED:
       p->selectedNPNProto_ = Persistent<Value>::New(String::New(
@@ -1103,7 +1103,7 @@ int Connection::SelectNextProtoCallback_(SSL *s,
                              ));
       break;
     case OPENSSL_NPN_NO_OVERLAP:
-      p->selectedNPNProto_ = Persistent<Value>::New(False());
+      p->selectedNPNProto_ = Persistent<Value>::New(False(node_isolate));
       break;
     default:
       break;
@@ -1137,7 +1137,8 @@ int Connection::SelectSNIContextCallback_(SSL *s, int *ad, void* arg) {
       Local<Value> argv[1] = {*p->servername_};
 
       // Call it
-      Local<Value> ret = Local<Value>::New(MakeCallback(p->sniObject_,
+      Local<Value> ret = Local<Value>::New(node_isolate,
+                                           MakeCallback(p->sniObject_,
                                                         "onselect",
                                                         ARRAY_SIZE(argv),
                                                         argv));
@@ -1308,7 +1309,7 @@ Handle<Value> Connection::EncIn(const Arguments& args) {
     ss->SetShutdownFlags();
   }
 
-  return scope.Close(Integer::New(bytes_written));
+  return scope.Close(Integer::New(bytes_written, node_isolate));
 }
 
 
@@ -1353,14 +1354,14 @@ Handle<Value> Connection::ClearOut(const Arguments& args) {
       ss->HandleSSLError("SSL_connect:ClearOut", rv, kZeroIsAnError);
     }
 
-    if (rv < 0) return scope.Close(Integer::New(rv));
+    if (rv < 0) return scope.Close(Integer::New(rv, node_isolate));
   }
 
   int bytes_read = SSL_read(ss->ssl_, buffer_data + off, len);
   ss->HandleSSLError("SSL_read:ClearOut", bytes_read, kZeroIsNotAnError);
   ss->SetShutdownFlags();
 
-  return scope.Close(Integer::New(bytes_read));
+  return scope.Close(Integer::New(bytes_read, node_isolate));
 }
 
 
@@ -1370,7 +1371,7 @@ Handle<Value> Connection::ClearPending(const Arguments& args) {
   Connection *ss = Connection::Unwrap(args);
 
   int bytes_pending = BIO_pending(ss->bio_read_);
-  return scope.Close(Integer::New(bytes_pending));
+  return scope.Close(Integer::New(bytes_pending, node_isolate));
 }
 
 
@@ -1380,7 +1381,7 @@ Handle<Value> Connection::EncPending(const Arguments& args) {
   Connection *ss = Connection::Unwrap(args);
 
   int bytes_pending = BIO_pending(ss->bio_write_);
-  return scope.Close(Integer::New(bytes_pending));
+  return scope.Close(Integer::New(bytes_pending, node_isolate));
 }
 
 
@@ -1419,7 +1420,7 @@ Handle<Value> Connection::EncOut(const Arguments& args) {
   ss->HandleBIOError(ss->bio_write_, "BIO_read:EncOut", bytes_read);
   ss->SetShutdownFlags();
 
-  return scope.Close(Integer::New(bytes_read));
+  return scope.Close(Integer::New(bytes_read, node_isolate));
 }
 
 
@@ -1463,7 +1464,7 @@ Handle<Value> Connection::ClearIn(const Arguments& args) {
       ss->HandleSSLError("SSL_connect:ClearIn", rv, kZeroIsAnError);
     }
 
-    if (rv < 0) return scope.Close(Integer::New(rv));
+    if (rv < 0) return scope.Close(Integer::New(rv, node_isolate));
   }
 
   int bytes_written = SSL_write(ss->ssl_, buffer_data + off, len);
@@ -1471,7 +1472,7 @@ Handle<Value> Connection::ClearIn(const Arguments& args) {
   ss->HandleSSLError("SSL_write:ClearIn", bytes_written, kZeroIsAnError);
   ss->SetShutdownFlags();
 
-  return scope.Close(Integer::New(bytes_written));
+  return scope.Close(Integer::New(bytes_written, node_isolate));
 }
 
 
@@ -1480,7 +1481,7 @@ Handle<Value> Connection::GetPeerCertificate(const Arguments& args) {
 
   Connection *ss = Connection::Unwrap(args);
 
-  if (ss->ssl_ == NULL) return Undefined();
+  if (ss->ssl_ == NULL) return Undefined(node_isolate);
   Local<Object> info = Object::New();
   X509* peer_cert = SSL_get_peer_certificate(ss->ssl_);
   if (peer_cert != NULL) {
@@ -1582,7 +1583,7 @@ Handle<Value> Connection::GetPeerCertificate(const Arguments& args) {
       for (int i = 0; i < sk_ASN1_OBJECT_num(eku); i++) {
         memset(buf, 0, sizeof(buf));
         OBJ_obj2txt(buf, sizeof(buf) - 1, sk_ASN1_OBJECT_value(eku, i), 1);
-        ext_key_usage->Set(Integer::New(i), String::New(buf));
+        ext_key_usage->Set(Integer::New(i, node_isolate), String::New(buf));
       }
 
       sk_ASN1_OBJECT_pop_free(eku, ASN1_OBJECT_free);
@@ -1599,10 +1600,10 @@ Handle<Value> Connection::GetSession(const Arguments& args) {
 
   Connection *ss = Connection::Unwrap(args);
 
-  if (ss->ssl_ == NULL) return Undefined();
+  if (ss->ssl_ == NULL) return Undefined(node_isolate);
 
   SSL_SESSION* sess = SSL_get_session(ss->ssl_);
-  if (!sess) return Undefined();
+  if (!sess) return Undefined(node_isolate);
 
   int slen = i2d_SSL_SESSION(sess, NULL);
   assert(slen > 0);
@@ -1616,7 +1617,7 @@ Handle<Value> Connection::GetSession(const Arguments& args) {
     return scope.Close(s);
   }
 
-  return Null();
+  return Null(node_isolate);
 }
 
 Handle<Value> Connection::SetSession(const Arguments& args) {
@@ -1649,7 +1650,7 @@ Handle<Value> Connection::SetSession(const Arguments& args) {
   delete [] sbuf;
 
   if (!sess)
-    return Undefined();
+    return Undefined(node_isolate);
 
   int r = SSL_set_session(ss->ssl_, sess);
   SSL_SESSION_free(sess);
@@ -1659,7 +1660,7 @@ Handle<Value> Connection::SetSession(const Arguments& args) {
     return ThrowException(Exception::Error(eStr));
   }
 
-  return True();
+  return True(node_isolate);
 }
 
 Handle<Value> Connection::LoadSession(const Arguments& args) {
@@ -1683,7 +1684,7 @@ Handle<Value> Connection::LoadSession(const Arguments& args) {
 
   ss->hello_parser_.Finish();
 
-  return True();
+  return True(node_isolate);
 }
 
 Handle<Value> Connection::IsSessionReused(const Arguments& args) {
@@ -1691,8 +1692,11 @@ Handle<Value> Connection::IsSessionReused(const Arguments& args) {
 
   Connection *ss = Connection::Unwrap(args);
 
-  if (ss->ssl_ == NULL) return False();
-  return SSL_session_reused(ss->ssl_) ? True() : False();
+  if (ss->ssl_ == NULL || SSL_session_reused(ss->ssl_) == false) {
+    return False(node_isolate);
+  }
+
+  return True(node_isolate);
 }
 
 
@@ -1711,10 +1715,10 @@ Handle<Value> Connection::Start(const Arguments& args) {
       ss->HandleSSLError("SSL_connect:Start", rv, kZeroIsAnError);
     }
 
-    return scope.Close(Integer::New(rv));
+    return scope.Close(Integer::New(rv, node_isolate));
   }
 
-  return scope.Close(Integer::New(0));
+  return scope.Close(Integer::New(0, node_isolate));
 }
 
 
@@ -1723,12 +1727,12 @@ Handle<Value> Connection::Shutdown(const Arguments& args) {
 
   Connection *ss = Connection::Unwrap(args);
 
-  if (ss->ssl_ == NULL) return False();
+  if (ss->ssl_ == NULL) return False(node_isolate);
   int rv = SSL_shutdown(ss->ssl_);
   ss->HandleSSLError("SSL_shutdown", rv, kZeroIsNotAnError);
   ss->SetShutdownFlags();
 
-  return scope.Close(Integer::New(rv));
+  return scope.Close(Integer::New(rv, node_isolate));
 }
 
 
@@ -1737,12 +1741,12 @@ Handle<Value> Connection::ReceivedShutdown(const Arguments& args) {
 
   Connection *ss = Connection::Unwrap(args);
 
-  if (ss->ssl_ == NULL) return False();
+  if (ss->ssl_ == NULL) return False(node_isolate);
   int r = SSL_get_shutdown(ss->ssl_);
 
-  if (r & SSL_RECEIVED_SHUTDOWN) return True();
+  if (r & SSL_RECEIVED_SHUTDOWN) return True(node_isolate);
 
-  return False();
+  return False(node_isolate);
 }
 
 
@@ -1751,8 +1755,11 @@ Handle<Value> Connection::IsInitFinished(const Arguments& args) {
 
   Connection *ss = Connection::Unwrap(args);
 
-  if (ss->ssl_ == NULL) return False();
-  return SSL_is_init_finished(ss->ssl_) ? True() : False();
+  if (ss->ssl_ == NULL || SSL_is_init_finished(ss->ssl_) == false) {
+    return False(node_isolate);
+  }
+
+  return True(node_isolate);
 }
 
 
@@ -1761,7 +1768,7 @@ Handle<Value> Connection::VerifyError(const Arguments& args) {
 
   Connection *ss = Connection::Unwrap(args);
 
-  if (ss->ssl_ == NULL) return Null();
+  if (ss->ssl_ == NULL) return Null(node_isolate);
 
 
   // XXX Do this check in JS land?
@@ -1782,7 +1789,7 @@ Handle<Value> Connection::VerifyError(const Arguments& args) {
 
   switch (x509_verify_error) {
     case X509_V_OK:
-      return Null();
+      return Null(node_isolate);
 
     case X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT:
       s = String::New("UNABLE_TO_GET_ISSUER_CERT");
@@ -1908,9 +1915,9 @@ Handle<Value> Connection::GetCurrentCipher(const Arguments& args) {
 
   OPENSSL_CONST SSL_CIPHER *c;
 
-  if ( ss->ssl_ == NULL ) return Undefined();
+  if ( ss->ssl_ == NULL ) return Undefined(node_isolate);
   c = SSL_get_current_cipher(ss->ssl_);
-  if ( c == NULL ) return Undefined();
+  if ( c == NULL ) return Undefined(node_isolate);
   Local<Object> info = Object::New();
   const char* cipher_name = SSL_CIPHER_get_name(c);
   info->Set(name_symbol, String::New(cipher_name));
@@ -1928,7 +1935,7 @@ Handle<Value> Connection::Close(const Arguments& args) {
     SSL_free(ss->ssl_);
     ss->ssl_ = NULL;
   }
-  return True();
+  return True(node_isolate);
 }
 
 #ifdef OPENSSL_NPN_NEGOTIATED
@@ -1944,7 +1951,7 @@ Handle<Value> Connection::GetNegotiatedProto(const Arguments& args) {
     SSL_get0_next_proto_negotiated(ss->ssl_, &npn_proto, &npn_proto_len);
 
     if (!npn_proto) {
-      return False();
+      return False(node_isolate);
     }
 
     return String::New((const char*) npn_proto, npn_proto_len);
@@ -1969,7 +1976,7 @@ Handle<Value> Connection::SetNPNProtocols(const Arguments& args) {
   }
   ss->npnProtos_ = Persistent<Object>::New(args[0]->ToObject());
 
-  return True();
+  return True(node_isolate);
 };
 #endif
 
@@ -1982,7 +1989,7 @@ Handle<Value> Connection::GetServername(const Arguments& args) {
   if (ss->is_server_ && !ss->servername_.IsEmpty()) {
     return ss->servername_;
   } else {
-    return False();
+    return False(node_isolate);
   }
 }
 
@@ -2003,7 +2010,7 @@ Handle<Value> Connection::SetSNICallback(const Arguments& args) {
   ss->sniObject_ = Persistent<Object>::New(Object::New());
   ss->sniObject_->Set(String::New("onselect"), args[0]);
 
-  return True();
+  return True(node_isolate);
 }
 #endif
 
@@ -2244,7 +2251,7 @@ class Cipher : public ObjectWrap {
 
     cipher->SetAutoPadding(args.Length() < 1 || args[0]->BooleanValue());
 
-    return Undefined();
+    return Undefined(node_isolate);
   }
 
   static Handle<Value> CipherFinal(const Arguments& args) {
@@ -2564,7 +2571,7 @@ class Decipher : public ObjectWrap {
 
     cipher->SetAutoPadding(args.Length() < 1 || args[0]->BooleanValue());
 
-    return Undefined();
+    return Undefined(node_isolate);
   }
 
   static Handle<Value> DecipherFinal(const Arguments& args) {
@@ -3713,12 +3720,12 @@ void EIO_PBKDF2(uv_work_t* work_req) {
 
 void EIO_PBKDF2After(pbkdf2_req* req, Local<Value> argv[2]) {
   if (req->err) {
-    argv[0] = Local<Value>::New(Undefined());
+    argv[0] = Local<Value>::New(node_isolate, Undefined(node_isolate));
     argv[1] = Encode(req->key, req->keylen, BUFFER);
     memset(req->key, 0, req->keylen);
   } else {
     argv[0] = Exception::Error(String::New("PBKDF2 error"));
-    argv[1] = Local<Value>::New(Undefined());
+    argv[1] = Local<Value>::New(node_isolate, Undefined(node_isolate));
   }
 
   delete[] req->pass;
@@ -3728,9 +3735,9 @@ void EIO_PBKDF2After(pbkdf2_req* req, Local<Value> argv[2]) {
 }
 
 
-void EIO_PBKDF2After(uv_work_t* work_req) {
+void EIO_PBKDF2After(uv_work_t* work_req, int status) {
+  assert(status == 0);
   pbkdf2_req* req = container_of(work_req, pbkdf2_req, work_req);
-
   HandleScope scope;
   Local<Value> argv[2];
   Persistent<Object> obj = req->obj;
@@ -3820,7 +3827,7 @@ Handle<Value> PBKDF2(const Arguments& args) {
                   &req->work_req,
                   EIO_PBKDF2,
                   EIO_PBKDF2After);
-    return Undefined();
+    return Undefined(node_isolate);
   } else {
     Local<Value> argv[2];
     EIO_PBKDF2(req);
@@ -3891,27 +3898,26 @@ void RandomBytesCheck(RandomBytesRequest* req, Local<Value> argv[2]) {
       ERR_error_string_n(req->error_, errmsg, sizeof errmsg);
 
     argv[0] = Exception::Error(String::New(errmsg));
-    argv[1] = Local<Value>::New(Null());
+    argv[1] = Local<Value>::New(node_isolate, Null(node_isolate));
   }
   else {
     // avoids the malloc + memcpy
     Buffer* buffer = Buffer::New(req->data_, req->size_, RandomBytesFree, NULL);
-    argv[0] = Local<Value>::New(Null());
-    argv[1] = Local<Object>::New(buffer->handle_);
+    argv[0] = Local<Value>::New(node_isolate, Null(node_isolate));
+    argv[1] = Local<Object>::New(node_isolate, buffer->handle_);
   }
 }
 
 
-void RandomBytesAfter(uv_work_t* work_req) {
+void RandomBytesAfter(uv_work_t* work_req, int status) {
+  assert(status == 0);
   RandomBytesRequest* req = container_of(work_req,
                                          RandomBytesRequest,
                                          work_req_);
-
   HandleScope scope;
   Local<Value> argv[2];
   RandomBytesCheck(req, argv);
   MakeCallback(req->obj_, "ondone", ARRAY_SIZE(argv), argv);
-
   delete req;
 }
 

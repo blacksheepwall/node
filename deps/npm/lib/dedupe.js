@@ -225,7 +225,7 @@ function findVersions (npm, summary, cb) {
     // not actually a dupe, or perhaps all the other copies were
     // children of a dupe, so this'll maybe be picked up later.
     if (locs.length === 0) {
-      return cb()
+      return cb(null, [])
     }
 
     // { <folder>: <version> }
@@ -265,6 +265,7 @@ function readInstalled (dir, counter, parent, cb) {
   })
 
   readJson(path.resolve(dir, "package.json"), function (er, data) {
+    if (er && er.code !== "ENOENT" && er.code !== "ENOTDIR") return cb(er)
     if (er) return cb() // not a package, probably.
     counter[data.name] = counter[data.name] || 0
     counter[data.name]++
@@ -293,6 +294,9 @@ function readInstalled (dir, counter, parent, cb) {
 
   fs.readdir(path.resolve(dir, "node_modules"), function (er, c) {
     children = c || [] // error is ok, just means no children.
+    children = children.filter(function (p) {
+      return !p.match(/^[\._-]/)
+    })
     next()
   })
 

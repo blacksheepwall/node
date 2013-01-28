@@ -33,10 +33,11 @@ all share server ports.
 
 Running node will now share port 8000 between the workers:
 
-    % node server.js
-    Worker 2438 online
-    Worker 2437 online
-
+    % NODE_DEBUG=cluster node server.js
+    23521,Master Worker 23524 online
+    23521,Master Worker 23526 online
+    23521,Master Worker 23523 online
+    23521,Master Worker 23528 online
 
 This feature was introduced recently, and may change in future versions.
 Please try it out and provide feedback.
@@ -469,7 +470,7 @@ on the specified worker.
 
     cluster.fork().on('online', function() {
       // Worker is online
-    };
+    });
 
 ### Event: 'listening'
 
@@ -480,7 +481,7 @@ on the specified worker.
 
     cluster.fork().on('listening', function(address) {
       // Worker is listening
-    };
+    });
 
 ### Event: 'disconnect'
 
@@ -489,7 +490,7 @@ on the specified worker.
 
     cluster.fork().on('disconnect', function() {
       // Worker has disconnected
-    };
+    });
 
 ### Event: 'exit'
 
@@ -509,4 +510,4 @@ is terminated.  See [child_process event: 'exit'](child_process.html#child_proce
       } else {
         console.log("worker success!");
       }
-    };
+    });
