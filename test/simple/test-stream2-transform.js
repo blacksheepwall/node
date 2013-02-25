@@ -61,6 +61,33 @@ process.nextTick(run);
 
 /////
 
+test('writable side consumption', function(t) {
+  var tx = new Transform({
+    highWaterMark: 10
+  });
+
+  var transformed = 0;
+  tx._transform = function(chunk, output, cb) {
+    transformed += chunk.length;
+    output(chunk);
+    cb();
+  };
+
+  for (var i = 1; i <= 10; i++) {
+    tx.write(new Buffer(i));
+  }
+  tx.end();
+
+  t.equal(tx._readableState.length, 10);
+  t.equal(transformed, 10);
+  t.equal(tx._transformState.writechunk.length, 5);
+  t.same(tx._writableState.buffer.map(function(c) {
+    return c[0].length;
+  }), [6, 7, 8, 9, 10]);
+
+  t.end();
+});
+
 test('passthrough', function(t) {
   var pt = new PassThrough();
 
@@ -185,8 +212,6 @@ test('assymetric transform (compress)', function(t) {
     }.bind(this), 10);
   };
 
-  pt._writableState.lowWaterMark = 3;
-
   pt.write(new Buffer('aaaa'));
   pt.write(new Buffer('bbbb'));
   pt.write(new Buffer('cccc'));
@@ -214,9 +239,7 @@ test('assymetric transform (compress)', function(t) {
 
 
 test('passthrough event emission', function(t) {
-  var pt = new PassThrough({
-    lowWaterMark: 0
-  });
+  var pt = new PassThrough();
   var emits = 0;
   pt.on('readable', function() {
     var state = pt._readableState;

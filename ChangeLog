@@ -1,4 +1,64 @@
-2013.01.24, Version 0.9.8 (Unstable)
+2013.02.19, Version 0.9.10 (Unstable)
+
+* V8: Upgrade to 3.15.11.15
+
+* npm: Upgrade to 1.2.12
+
+* fs: Change default WriteStream config, increase perf (isaacs)
+
+* process: streamlining tick callback logic (Trevor Norris)
+
+* stream_wrap, udp_wrap: add read-only fd property (Ben Noordhuis)
+
+* buffer: accept negative indices in Buffer#slice() (Ben Noordhuis)
+
+* tls: Cycle data when underlying socket drains (isaacs)
+
+* stream: read(0) should not always trigger _read(n,cb) (isaacs)
+
+* stream: Empty strings/buffers do not signal EOF any longer (isaacs)
+
+* crypto: improve cipher/decipher error messages (Ben Noordhuis)
+
+* net: Respect the 'readable' flag on sockets (isaacs)
+
+* net: don't suppress ECONNRESET (Ben Noordhuis)
+
+* typed arrays: copy Buffer in typed array constructor (Ben Noordhuis)
+
+* typed arrays: make DataView throw on non-ArrayBuffer (Ben Noordhuis)
+
+* windows: MSI installer enhancements (Scott Blomquist, Jim Schubert)
+
+
+2013.02.07, Version 0.9.9 (Unstable), 4b9f0d190cd6b22853caeb0e07145a98ce1d1d7f
+
+* tls: port CryptoStream to streams2 (Fedor Indutny)
+
+* typed arrays: only share ArrayBuffer backing store (Ben Noordhuis)
+
+* stream: make Writable#end() accept a callback function (Nathan Rajlich)
+
+* buffer: optimize 'hex' handling (Ben Noordhuis)
+
+* dns, cares: don't filter NOTIMP, REFUSED, SERVFAIL (Ben Noordhuis)
+
+* readline: treat bare \r as a line ending (isaacs)
+
+* readline: make \r\n emit one 'line' event (Ben Noordhuis)
+
+* cluster: support datagram sockets (Bert Belder)
+
+* stream: Correct Transform class backpressure (isaacs)
+
+* addon: Pass module object to NODE_MODULE init function (isaacs, Rod Vagg)
+
+* buffer: slow buffer copy compatibility fix (Trevor Norris)
+
+* Add bytesWritten to tls.CryptoStream (Andy Burke)
+
+
+2013.01.24, Version 0.9.8 (Unstable), 5f2f8400f665dc32c3e10e7d31d53d756ded9156
 
 * npm: Upgrade to v1.2.3
 
@@ -325,6 +385,38 @@
 * readline: Use one history item for reentered line (Vladimir Beloborodov)
 
 * Fix #3521 Make process.env more like a regular Object (isaacs)
+
+
+2013.02.15, Version 0.8.20 (Stable), e10c75579b536581ddd7ae4e2c3bf8a9d550d343
+
+* npm: Upgrade to v1.2.11
+
+* http: Do not let Agent hand out destroyed sockets (isaacs)
+
+* http: Raise hangup error on destroyed socket write (isaacs)
+
+* http: protect against response splitting attacks (Bert Belder)
+
+
+2013.02.06, Version 0.8.19 (Stable), 53978bdf420622ff0121c63c0338c9e7c2e60869
+
+* npm: Upgrade to v1.2.10
+
+* zlib: pass object size hint to V8 (Ben Noordhuis)
+
+* zlib: reduce memory consumption, release early (Ben Noordhuis)
+
+* buffer: slow buffer copy compatibility fix (Trevor Norris)
+
+* zlib: don't assert on malformed dictionary (Ben Noordhuis)
+
+* zlib: don't assert on missing dictionary (Ben Noordhuis)
+
+* windows: better ipv6 support (Bert Belder)
+
+* windows: add error mappings related to unsupported protocols (Bert Belder)
+
+* windows: map ERROR_DIRECTORY to UV_ENOENT (Bert Belder)
 
 
 2013.01.18, Version 0.8.18 (Stable), 2c4eef0d972838c51999d32c0d251857a713dc18

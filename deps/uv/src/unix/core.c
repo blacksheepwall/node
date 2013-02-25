@@ -306,7 +306,7 @@ void uv_update_time(uv_loop_t* loop) {
 }
 
 
-int64_t uv_now(uv_loop_t* loop) {
+uint64_t uv_now(uv_loop_t* loop) {
   return loop->time;
 }
 
@@ -595,15 +595,12 @@ void uv__io_init(uv__io_t* w, uv__io_cb cb, int fd) {
   w->fd = fd;
   w->events = 0;
   w->pevents = 0;
+
+#if defined(UV_HAVE_KQUEUE)
+  w->rcount = 0;
+  w->wcount = 0;
+#endif /* defined(UV_HAVE_KQUEUE) */
 }
-
-
-/* Note that uv__io_start() and uv__io_stop() can't simply remove the watcher
- * from the queue when the new event mask equals the old one. The event ports
- * backend operates exclusively in single-shot mode and needs to rearm all fds
- * before each call to port_getn(). It's up to the individual backends to
- * filter out superfluous event mask modifications.
- */
 
 
 void uv__io_start(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
@@ -614,6 +611,20 @@ void uv__io_start(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
 
   w->pevents |= events;
   maybe_resize(loop, w->fd + 1);
+
+#if !defined(__sun)
+  /* The event ports backend needs to rearm all file descriptors on each and
+   * every tick of the event loop but the other backends allow us to
+   * short-circuit here if the event mask is unchanged.
+   */
+  if (w->events == w->pevents) {
+    if (w->events == 0 && !ngx_queue_empty(&w->watcher_queue)) {
+      ngx_queue_remove(&w->watcher_queue);
+      ngx_queue_init(&w->watcher_queue);
+    }
+    return;
+  }
+#endif
 
   if (ngx_queue_empty(&w->watcher_queue))
     ngx_queue_insert_tail(&loop->watcher_queue, &w->watcher_queue);

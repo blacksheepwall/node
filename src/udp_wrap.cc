@@ -31,15 +31,28 @@
 #define SLAB_SIZE (1024 * 1024)
 
 
-using namespace v8;
-
 namespace node {
+
+using v8::AccessorInfo;
+using v8::Arguments;
+using v8::Function;
+using v8::FunctionTemplate;
+using v8::Handle;
+using v8::HandleScope;
+using v8::Integer;
+using v8::Local;
+using v8::Object;
+using v8::Persistent;
+using v8::PropertyAttribute;
+using v8::String;
+using v8::Value;
 
 typedef ReqWrap<uv_udp_send_t> SendWrap;
 
 // see tcp_wrap.cc
 Local<Object> AddressToJS(const sockaddr* addr);
 
+static Persistent<Function> constructor;
 static Persistent<String> buffer_sym;
 static Persistent<String> oncomplete_sym;
 static Persistent<String> onmessage_sym;
@@ -80,6 +93,15 @@ void UDPWrap::Initialize(Handle<Object> target) {
   t->InstanceTemplate()->SetInternalFieldCount(1);
   t->SetClassName(String::NewSymbol("UDP"));
 
+  enum PropertyAttribute attributes =
+      static_cast<PropertyAttribute>(v8::ReadOnly | v8::DontDelete);
+  t->InstanceTemplate()->SetAccessor(String::New("fd"),
+                                     UDPWrap::GetFD,
+                                     NULL,
+                                     Handle<Value>(),
+                                     v8::DEFAULT,
+                                     attributes);
+
   NODE_SET_PROTOTYPE_METHOD(t, "bind", Bind);
   NODE_SET_PROTOTYPE_METHOD(t, "send", Send);
   NODE_SET_PROTOTYPE_METHOD(t, "bind6", Bind6);
@@ -98,8 +120,9 @@ void UDPWrap::Initialize(Handle<Object> target) {
   NODE_SET_PROTOTYPE_METHOD(t, "ref", HandleWrap::Ref);
   NODE_SET_PROTOTYPE_METHOD(t, "unref", HandleWrap::Unref);
 
-  target->Set(String::NewSymbol("UDP"),
-              Persistent<FunctionTemplate>::New(t)->GetFunction());
+  constructor = Persistent<Function>::New(
+      Persistent<FunctionTemplate>::New(t)->GetFunction());
+  target->Set(String::NewSymbol("UDP"), constructor);
 }
 
 
@@ -111,6 +134,19 @@ Handle<Value> UDPWrap::New(const Arguments& args) {
 
   return scope.Close(args.This());
 }
+
+
+Handle<Value> UDPWrap::GetFD(Local<String>, const AccessorInfo& args) {
+#if defined(_WIN32)
+  return v8::Null(node_isolate);
+#else
+  HandleScope scope;
+  UNWRAP(UDPWrap)
+  int fd = (wrap == NULL) ? -1 : wrap->handle_.io_watcher.fd;
+  return scope.Close(Integer::New(fd, node_isolate));
+#endif
+}
+
 
 Handle<Value> UDPWrap::DoBind(const Arguments& args, int family) {
   HandleScope scope;
@@ -389,6 +425,17 @@ UDPWrap* UDPWrap::Unwrap(Local<Object> obj) {
   assert(!obj.IsEmpty());
   assert(obj->InternalFieldCount() > 0);
   return static_cast<UDPWrap*>(obj->GetAlignedPointerFromInternalField(0));
+}
+
+
+Local<Object> UDPWrap::Instantiate() {
+  // If this assert fires then Initialize hasn't been called yet.
+  assert(constructor.IsEmpty() == false);
+
+  HandleScope scope;
+  Local<Object> obj = constructor->NewInstance();
+
+  return scope.Close(obj);
 }
 
 

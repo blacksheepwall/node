@@ -61,6 +61,7 @@ using namespace v8;
 static Persistent<String> length_symbol;
 static Persistent<String> chars_written_sym;
 static Persistent<String> write_sym;
+static Persistent<Function> fast_buffer_constructor;
 Persistent<FunctionTemplate> Buffer::constructor_template;
 
 
@@ -277,6 +278,26 @@ Handle<Value> Buffer::Ucs2Slice(const Arguments &args) {
 }
 
 
+Handle<Value> Buffer::HexSlice(const Arguments &args) {
+  HandleScope scope;
+  Buffer* parent = ObjectWrap::Unwrap<Buffer>(args.This());
+  SLICE_ARGS(args[0], args[1])
+  char* src = parent->data_ + start;
+  uint32_t dstlen = (end - start) * 2;
+  if (dstlen == 0) return scope.Close(String::Empty(node_isolate));
+  char* dst = new char[dstlen];
+  for (uint32_t i = 0, k = 0; k < dstlen; i += 1, k += 2) {
+    static const char hex[] = "0123456789abcdef";
+    uint8_t val = static_cast<uint8_t>(src[i]);
+    dst[k + 0] = hex[val >> 4];
+    dst[k + 1] = hex[val & 15];
+  }
+  Local<String> string = String::New(dst, dstlen);
+  delete[] dst;
+  return scope.Close(string);
+}
+
+
 // supports regular and URL-safe base64
 static const int unbase64_table[] =
   {-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-2,-1,-1,-2,-1,-1
@@ -401,10 +422,10 @@ Handle<Value> Buffer::Copy(const Arguments &args) {
   Local<Value> target = args[0];
   char* target_data = Buffer::Data(target);
   size_t target_length = Buffer::Length(target);
-  size_t target_start = args[1]->Uint32Value();
-  size_t source_start = args[2]->Uint32Value();
-  size_t source_end = args[3]->IsUint32() ? args[3]->Uint32Value()
-                                          : source->length_;
+  size_t target_start = args[1]->IsUndefined() ? 0 : args[1]->Uint32Value();
+  size_t source_start = args[2]->IsUndefined() ? 0 : args[2]->Uint32Value();
+  size_t source_end = args[3]->IsUndefined() ? source->length_
+                                              : args[3]->Uint32Value();
 
   if (source_end < source_start) {
     return ThrowRangeError("sourceEnd < sourceStart");
@@ -522,6 +543,72 @@ Handle<Value> Buffer::Ucs2Write(const Arguments &args) {
                                            Integer::New(written, node_isolate));
 
   return scope.Close(Integer::New(written * 2, node_isolate));
+}
+
+
+inline unsigned hex2bin(char c) {
+  if (c >= '0' && c <= '9') return c - '0';
+  if (c >= 'A' && c <= 'F') return 10 + (c - 'A');
+  if (c >= 'a' && c <= 'f') return 10 + (c - 'a');
+  return static_cast<unsigned>(-1);
+}
+
+
+Handle<Value> Buffer::HexWrite(const Arguments& args) {
+  HandleScope scope;
+  Buffer* parent = ObjectWrap::Unwrap<Buffer>(args.This());
+
+  if (args[0]->IsString() == false) {
+    return ThrowTypeError("Argument must be a string");
+  }
+
+  Local<String> s = args[0].As<String>();
+
+  if (s->Length() % 2 != 0) {
+    return ThrowTypeError("Invalid hex string");
+  }
+
+  uint32_t start = args[1]->Uint32Value();
+  uint32_t size = args[2]->Uint32Value();
+  uint32_t end = start + size;
+
+  if (start >= parent->length_) {
+    Local<Integer> val = Integer::New(0, node_isolate);
+    constructor_template->GetFunction()->Set(chars_written_sym, val);
+    return scope.Close(val);
+  }
+
+  if (end < start || end > parent->length_) {  // Overflow + bounds check.
+    end = parent->length_;
+    size = parent->length_ - start;
+  }
+
+  if (size == 0) {
+    Local<Integer> val = Integer::New(0, node_isolate);
+    constructor_template->GetFunction()->Set(chars_written_sym, val);
+    return scope.Close(val);
+  }
+
+  char* dst = parent->data_ + start;
+  String::AsciiValue string(s);
+  const char* src = *string;
+  uint32_t max = string.length() / 2;
+
+  if (max > size) {
+    max = size;
+  }
+
+  for (uint32_t i = 0; i < max; ++i) {
+    unsigned a = hex2bin(src[i * 2 + 0]);
+    unsigned b = hex2bin(src[i * 2 + 1]);
+    if (!~a || !~b) return ThrowTypeError("Invalid hex string");
+    dst[i] = a * 16 + b;
+  }
+
+  constructor_template->GetFunction()->Set(chars_written_sym,
+                                           Integer::New(max * 2, node_isolate));
+
+  return scope.Close(Integer::New(max, node_isolate));
 }
 
 
@@ -827,14 +914,23 @@ bool Buffer::HasInstance(Handle<Value> val) {
   if (!val->IsObject()) return false;
   Local<Object> obj = val->ToObject();
 
-  if (obj->GetIndexedPropertiesExternalArrayDataType() == kExternalUnsignedByteArray)
-    return true;
+  ExternalArrayType type = obj->GetIndexedPropertiesExternalArrayDataType();
+  if (type != kExternalUnsignedByteArray)
+    return false;
 
   // Also check for SlowBuffers that are empty.
   if (constructor_template->HasInstance(obj))
     return true;
 
-  return false;
+  assert(!fast_buffer_constructor.IsEmpty());
+  return obj->GetConstructor()->StrictEquals(fast_buffer_constructor);
+}
+
+
+Handle<Value> SetFastBufferConstructor(const Arguments& args) {
+  assert(args[0]->IsFunction());
+  fast_buffer_constructor = Persistent<Function>::New(args[0].As<Function>());
+  return Undefined();
 }
 
 
@@ -920,6 +1016,7 @@ void Buffer::Initialize(Handle<Object> target) {
   NODE_SET_PROTOTYPE_METHOD(constructor_template, "asciiSlice", Buffer::AsciiSlice);
   NODE_SET_PROTOTYPE_METHOD(constructor_template, "base64Slice", Buffer::Base64Slice);
   NODE_SET_PROTOTYPE_METHOD(constructor_template, "ucs2Slice", Buffer::Ucs2Slice);
+  NODE_SET_PROTOTYPE_METHOD(constructor_template, "hexSlice", Buffer::HexSlice);
   // TODO NODE_SET_PROTOTYPE_METHOD(t, "utf16Slice", Utf16Slice);
   // copy
   NODE_SET_PROTOTYPE_METHOD(constructor_template, "utf8Slice", Buffer::Utf8Slice);
@@ -929,6 +1026,7 @@ void Buffer::Initialize(Handle<Object> target) {
   NODE_SET_PROTOTYPE_METHOD(constructor_template, "binaryWrite", Buffer::BinaryWrite);
   NODE_SET_PROTOTYPE_METHOD(constructor_template, "base64Write", Buffer::Base64Write);
   NODE_SET_PROTOTYPE_METHOD(constructor_template, "ucs2Write", Buffer::Ucs2Write);
+  NODE_SET_PROTOTYPE_METHOD(constructor_template, "hexWrite", Buffer::HexWrite);
   NODE_SET_PROTOTYPE_METHOD(constructor_template, "readFloatLE", Buffer::ReadFloatLE);
   NODE_SET_PROTOTYPE_METHOD(constructor_template, "readFloatBE", Buffer::ReadFloatBE);
   NODE_SET_PROTOTYPE_METHOD(constructor_template, "readDoubleLE", Buffer::ReadDoubleLE);
@@ -948,6 +1046,8 @@ void Buffer::Initialize(Handle<Object> target) {
                   Buffer::MakeFastBuffer);
 
   target->Set(String::NewSymbol("SlowBuffer"), constructor_template->GetFunction());
+  target->Set(String::NewSymbol("setFastBufferConstructor"),
+              FunctionTemplate::New(SetFastBufferConstructor)->GetFunction());
 
   HeapProfiler::DefineWrapperClass(BUFFER_CLASS_ID, WrapperInfo);
 }

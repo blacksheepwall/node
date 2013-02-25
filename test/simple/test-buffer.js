@@ -127,14 +127,23 @@ for (var i = 0; i < b.length; i++) {
   assert.strictEqual(cntr, b[i]);
 }
 
-// copy from b to c with negative targetStart
-b.fill(++cntr);
-c.fill(++cntr);
-var copied = b.copy(c, -1);
-console.log('copied %d bytes from b into c w/ negative targetStart', copied);
-assert.strictEqual(c.length, copied);
-for (var i = 0; i < c.length; i++) {
-  assert.strictEqual(b[i], c[i]);
+
+// copy from fast to slow buffer
+var sb = new SlowBuffer(b.length);
+var copied = b.copy(sb);
+console.log('copied %d bytes from b into sb');
+for (var i = 0; i < sb.length; i++) {
+  assert.strictEqual(sb[i], b[i]);
+}
+
+var caught_error = null;
+
+// try to copy from before the beginning of b
+caught_error = null;
+try {
+  var copied = b.copy(c, 0, 100, 10);
+} catch (err) {
+  caught_error = err;
 }
 
 // copy from b to c with negative sourceStart
@@ -917,29 +926,23 @@ assert.throws(function() {
 }, RangeError);
 
 assert.throws(function() {
-  var len = 0xfffff;
-  var sbuf = new SlowBuffer(len);
-  sbuf = sbuf.slice(-len);                          // Should throw.
-  for (var i = 0; i < len; ++i) sbuf[i] = 0x42;     // Try to force segfault.
-}, RangeError);
-
-assert.throws(function() {
   var sbuf = new SlowBuffer(1);
   var buf = new Buffer(sbuf, 1, 0);
   buf.length = 0xffffffff;
   buf.slice(0xffffff0, 0xffffffe);                  // Should throw.
 }, Error);
 
-assert.throws(function() {
-  var sbuf = new SlowBuffer(8);
-  var buf = new Buffer(sbuf, 8, 0);
-  buf.slice(-8);  // Should throw. Throws Error instead of RangeError
-                  // for the sake of v0.8 compatibility.
-}, Error);
-
-assert.throws(function() {
-  var sbuf = new SlowBuffer(16);
-  var buf = new Buffer(sbuf, 8, 8);
-  buf.slice(-8);  // Should throw. Throws Error instead of RangeError
-                  // for the sake of v0.8 compatibility.
-}, Error);
+(function() {
+  var buf = new Buffer('0123456789');
+  assert.equal(buf.slice(-10, 10), '0123456789');
+  assert.equal(buf.slice(-20, 10), '0123456789');
+  assert.equal(buf.slice(-20, -10), '');
+  assert.equal(buf.slice(0, -1), '012345678');
+  assert.equal(buf.slice(2, -2), '234567');
+  assert.equal(buf.slice(0, 65536), '0123456789');
+  assert.equal(buf.slice(65536, 0), '');
+  for (var i = 0, s = buf.toString(); i < buf.length; ++i) {
+    assert.equal(buf.slice(-i), s.slice(-i));
+    assert.equal(buf.slice(0, -i), s.slice(0, -i));
+  }
+})();

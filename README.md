@@ -15,6 +15,14 @@ Unix/Macintosh:
     make
     make install
 
+If your python binary is in a non-standard location or has a
+non-standard name, run the following instead:
+
+    export PYTHON=/path/to/python
+    $PYTHON ./configure
+    make
+    make install
+
 Windows:
 
     vcbuild.bat
@@ -39,10 +47,6 @@ Windows:
 
 Resources for Newcomers
 ---
-  - [nodeapi](http://nodejsapi.cloudfoundry.com/)
-  - [node 编码规范](https://github.com/sdg-sysdev/node/wiki/node-%E7%BC%96%E7%A0%81%E8%A7%84%E8%8C%83)
-  - [NodeJs 学习日记](http://neekey.net/wiki/doku.php?id=nodejs)
-  - [Node 入门](http://www.nodebeginner.org/index-zh-cn.html)
   - [The Wiki](https://github.com/joyent/node/wiki)
   - [nodejs.org](http://nodejs.org/)
   - [how to install node.js and npm (node package manager)](http://joyeur.com/2010/12/10/installing-node-and-npm/)
